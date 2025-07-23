@@ -453,7 +453,13 @@
                     <input type="number" class="admin-input" id="mission-distance" placeholder="Distance (km)">
                     <input type="number" class="admin-input" id="mission-reward" placeholder="Récompense (€)">
                     <input type="number" class="admin-input" id="mission-fuel" placeholder="Carburant requis (L)">
-                    <input type="number" class="admin-input" id="mission-time" placeholder="Durée (secondes)">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" class="admin-input" id="mission-time" placeholder="Durée" style="flex: 1;">
+                        <select class="admin-input" id="mission-time-unit" style="width: auto; min-width: 100px;">
+                            <option value="minutes">Minutes</option>
+                            <option value="hours">Heures</option>
+                        </select>
+                    </div>
                     <label style="display: flex; align-items: center; margin: 10px 0;">
                         <input type="checkbox" id="mission-urgent" style="margin-right: 10px;"> Mission urgente (+50% récompense)
                     </label>
@@ -468,6 +474,25 @@
                     <h3>⭐ Réputation</h3>
                     <input type="number" class="admin-input" id="admin-reputation" placeholder="Réputation">
                     <button class="admin-btn" onclick="setReputation()">Définir la Réputation</button>
+                </div>
+                <div class="admin-section">
+                    <h3>🎯 Templates de Missions Auto</h3>
+                    <select class="admin-input" id="template-selector" onchange="loadTemplate()">
+                        <option value="">Choisir un template à modifier</option>
+                    </select>
+                    <input type="text" class="admin-input" id="template-destination" placeholder="Destination" readonly>
+                    <input type="number" class="admin-input" id="template-distance" placeholder="Distance (km)">
+                    <input type="number" class="admin-input" id="template-reward" placeholder="Récompense de base (€)">
+                    <input type="number" class="admin-input" id="template-fuel" placeholder="Carburant requis (L)">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" class="admin-input" id="template-time" placeholder="Durée" style="flex: 1;">
+                        <select class="admin-input" id="template-time-unit" style="width: auto; min-width: 100px;">
+                            <option value="seconds">Secondes</option>
+                            <option value="minutes">Minutes</option>
+                            <option value="hours">Heures</option>
+                        </select>
+                    </div>
+                    <button class="admin-btn" onclick="updateTemplate()">Mettre à Jour Template</button>
                 </div>
             </div>
         </div>
@@ -611,16 +636,16 @@
             offlineTime: 0
         };
 
-        // Données des missions
+        // Données des missions avec unités de temps plus lisibles
         const missionTemplates = [
-            { destination: "Paris", distance: 100, baseReward: 200, fuelCost: 5, time: 60 },
-            { destination: "Lyon", distance: 150, baseReward: 300, fuelCost: 8, time: 90 },
-            { destination: "Marseille", distance: 200, baseReward: 400, fuelCost: 10, time: 120 },
-            { destination: "Bordeaux", distance: 180, baseReward: 350, fuelCost: 9, time: 100 },
-            { destination: "Toulouse", distance: 170, baseReward: 330, fuelCost: 8, time: 95 },
-            { destination: "Lille", distance: 80, baseReward: 180, fuelCost: 4, time: 50 },
-            { destination: "Strasbourg", distance: 140, baseReward: 280, fuelCost: 7, time: 80 },
-            { destination: "Nantes", distance: 130, baseReward: 260, fuelCost: 6, time: 75 }
+            { destination: "Paris", distance: 100, baseReward: 200, fuelCost: 5, time: 1, timeUnit: "minutes" },
+            { destination: "Lyon", distance: 150, baseReward: 300, fuelCost: 8, time: 1.5, timeUnit: "minutes" },
+            { destination: "Marseille", distance: 200, baseReward: 400, fuelCost: 10, time: 2, timeUnit: "minutes" },
+            { destination: "Bordeaux", distance: 180, baseReward: 350, fuelCost: 9, time: 1.7, timeUnit: "minutes" },
+            { destination: "Toulouse", distance: 170, baseReward: 330, fuelCost: 8, time: 1.6, timeUnit: "minutes" },
+            { destination: "Lille", distance: 80, baseReward: 180, fuelCost: 4, time: 50, timeUnit: "seconds" },
+            { destination: "Strasbourg", distance: 140, baseReward: 280, fuelCost: 7, time: 1.3, timeUnit: "minutes" },
+            { destination: "Nantes", distance: 130, baseReward: 260, fuelCost: 6, time: 1.2, timeUnit: "minutes" }
         ];
 
         // Boutique
@@ -677,6 +702,9 @@
             renderTrucks();
             renderMissions();
             renderShop();
+            
+            // Initialiser le sélecteur de templates
+            populateTemplateSelector();
             
             // Démarrer les timers
             setInterval(updateFuelProduction, 1000);
@@ -1104,9 +1132,25 @@
         function addAutoMissions(count) {
             for (let i = 0; i < count; i++) {
                 const template = missionTemplates[Math.floor(Math.random() * missionTemplates.length)];
+                
+                // Convertir le temps en secondes selon l'unité du template
+                let timeInSeconds;
+                switch(template.timeUnit) {
+                    case 'minutes':
+                        timeInSeconds = template.time * 60;
+                        break;
+                    case 'hours':
+                        timeInSeconds = template.time * 3600;
+                        break;
+                    case 'seconds':
+                    default:
+                        timeInSeconds = template.time;
+                }
+                
                 const mission = {
                     id: Date.now() + i * 1000, // ID entier unique
                     ...template,
+                    time: timeInSeconds, // Utiliser le temps converti
                     reward: Math.floor(template.baseReward * (0.8 + Math.random() * 0.4)),
                     urgency: Math.random() > 0.7 ? 'urgent' : 'normal',
                     isCustom: false
@@ -1346,17 +1390,106 @@
             }
         }
 
+        // Fonctions pour gérer les templates de missions
+        function populateTemplateSelector() {
+            const selector = document.getElementById('template-selector');
+            if (!selector) return;
+            
+            // Vider le sélecteur
+            selector.innerHTML = '<option value="">Choisir un template à modifier</option>';
+            
+            // Ajouter chaque template
+            missionTemplates.forEach((template, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = template.destination;
+                selector.appendChild(option);
+            });
+        }
+        
+        function loadTemplate() {
+            const selector = document.getElementById('template-selector');
+            const index = parseInt(selector.value);
+            
+            if (isNaN(index) || index < 0 || index >= missionTemplates.length) {
+                // Vider les champs si aucun template sélectionné
+                document.getElementById('template-destination').value = '';
+                document.getElementById('template-distance').value = '';
+                document.getElementById('template-reward').value = '';
+                document.getElementById('template-fuel').value = '';
+                document.getElementById('template-time').value = '';
+                document.getElementById('template-time-unit').value = 'minutes';
+                return;
+            }
+            
+            const template = missionTemplates[index];
+            document.getElementById('template-destination').value = template.destination;
+            document.getElementById('template-distance').value = template.distance;
+            document.getElementById('template-reward').value = template.baseReward;
+            document.getElementById('template-fuel').value = template.fuelCost;
+            document.getElementById('template-time').value = template.time;
+            document.getElementById('template-time-unit').value = template.timeUnit || 'minutes';
+        }
+        
+        function updateTemplate() {
+            const selector = document.getElementById('template-selector');
+            const index = parseInt(selector.value);
+            
+            if (isNaN(index) || index < 0 || index >= missionTemplates.length) {
+                showNotification('Veuillez sélectionner un template à modifier !');
+                return;
+            }
+            
+            const distance = parseInt(document.getElementById('template-distance').value);
+            const reward = parseInt(document.getElementById('template-reward').value);
+            const fuel = parseInt(document.getElementById('template-fuel').value);
+            const time = parseFloat(document.getElementById('template-time').value);
+            const timeUnit = document.getElementById('template-time-unit').value;
+            
+            if (isNaN(distance) || isNaN(reward) || isNaN(fuel) || isNaN(time)) {
+                showNotification('Veuillez remplir tous les champs numériques !');
+                return;
+            }
+            
+            // Mettre à jour le template
+            missionTemplates[index].distance = distance;
+            missionTemplates[index].baseReward = reward;
+            missionTemplates[index].fuelCost = fuel;
+            missionTemplates[index].time = time;
+            missionTemplates[index].timeUnit = timeUnit;
+            
+            playSound('upgrade');
+            showNotification(`Template ${missionTemplates[index].destination} mis à jour !`);
+            
+            // Régénérer les missions pour appliquer les changements
+            generateMissions();
+        }
+
         function createCustomMission() {
             const destination = document.getElementById('mission-destination').value;
             const distance = parseInt(document.getElementById('mission-distance').value);
             const reward = parseInt(document.getElementById('mission-reward').value);
             const fuelCost = parseInt(document.getElementById('mission-fuel').value);
-            const time = parseInt(document.getElementById('mission-time').value);
+            const timeValue = parseInt(document.getElementById('mission-time').value);
+            const timeUnit = document.getElementById('mission-time-unit').value;
             const isUrgent = document.getElementById('mission-urgent').checked;
 
-            if (!destination || isNaN(distance) || isNaN(reward) || isNaN(fuelCost) || isNaN(time)) {
+            if (!destination || isNaN(distance) || isNaN(reward) || isNaN(fuelCost) || isNaN(timeValue)) {
                 showNotification('Veuillez remplir tous les champs !');
                 return;
+            }
+
+            // Convertir le temps en secondes selon l'unité choisie
+            let timeInSeconds;
+            switch(timeUnit) {
+                case 'minutes':
+                    timeInSeconds = timeValue * 60;
+                    break;
+                case 'hours':
+                    timeInSeconds = timeValue * 3600;
+                    break;
+                default:
+                    timeInSeconds = timeValue;
             }
 
             const mission = {
@@ -1366,7 +1499,7 @@
                 baseReward: reward,
                 reward: isUrgent ? Math.floor(reward * 1.5) : reward,
                 fuelCost: fuelCost,
-                time: time,
+                time: timeInSeconds,
                 urgency: isUrgent ? 'urgent' : 'normal',
                 isCustom: true // Marquer comme mission personnalisée
             };
